@@ -5,69 +5,116 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>PDF Page Extractor</title>
   <style>
-    body { font-family: sans-serif; max-width: 600px; margin: 2rem auto; }
-    label, input, button { display: block; width: 100%; margin-top: 0.5rem; }
-    textarea { width: 100%; height: 150px; margin-top: 0.5rem; }
+    body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #f0f2f5; margin: 0; }
+    .container { background: #fff; width: 400px; max-width: 90%; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    h1 { margin: 0 0 1rem; font-size: 1.5rem; text-align: center; }
+    .drop-area { border: 2px dashed #ccc; border-radius: 8px; padding: 2rem; text-align: center; color: #888; transition: background 0.2s, border-color 0.2s; cursor: pointer; }
+    .drop-area.dragover { border-color: #007bff; color: #007bff; background: #eef5ff; }
+    input[type=file] { display: none; }
+    .controls { display: flex; gap: 1rem; margin-top: 1rem; }
+    .controls input { flex: 1; padding: 0.5rem; border: 1px solid #ccc; border-radius: 6px; }
+    button { width: 100%; padding: 0.75rem; margin-top: 1rem; background: #007bff; color: #fff; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; transition: background 0.2s; }
+    button:disabled { background: #aaa; cursor: not-allowed; }
+    #downloadLink { display: none; margin-top: 1rem; text-align: center; }
+    #downloadLink a { color: #007bff; text-decoration: none; font-weight: bold; }
+    .page-info { margin-top: 1rem; text-align: center; color: #555; }
   </style>
 </head>
 <body>
-  <h1>PDF Page Extractor</h1>
-  <label>
-    PDF (Base64):
-    <textarea id="pdfBase64"></textarea>
-  </label>
-  <label>
-    Start Page Index (0-based):
-    <input type="number" id="start" min="0" value="0"/>
-  </label>
-  <label>
-    End Page Index (0-based):
-    <input type="number" id="end" min="0" value="0"/>
-  </label>
-  <button id="extractBtn">Extract Pages</button>
+  <div class="container">
+    <h1>PDF Page Extractor</h1>
+    <div class="drop-area" id="dropArea">Drag & Drop PDF here or <label for="fileInput" style="color:#007bff; text-decoration:underline; cursor:pointer;">Browse</label></div>
+    <input type="file" id="fileInput" accept="application/pdf" />
 
-  <h2>Extracted PDF (Base64)</h2>
-  <textarea id="result" readonly></textarea>
-  <a id="downloadLink" style="display:none; margin-top:1rem;">Download Extracted PDF</a>
+    <div class="page-info" id="pageInfo" hidden>Pages: <span id="pageCount">0</span></div>
+
+    <div class="controls">
+      <input type="number" id="start" min="0" placeholder="Start page" disabled />
+      <input type="number" id="end" min="0" placeholder="End page" disabled />
+    </div>
+    <button id="extractBtn" disabled>Extract Pages</button>
+
+    <div id="downloadLink"><a href="#" download="extracted.pdf">Download Extracted PDF</a></div>
+  </div>
 
   <script>
-    document.getElementById('extractBtn').addEventListener('click', async () => {
-      const pdfBase64 = document.getElementById('pdfBase64').value.trim();
-      const start = parseInt(document.getElementById('start').value, 10);
-      const end = parseInt(document.getElementById('end').value, 10);
+    const dropArea = document.getElementById('dropArea');
+    const fileInput = document.getElementById('fileInput');
+    const pageInfo = document.getElementById('pageInfo');
+    const pageCountEl = document.getElementById('pageCount');
+    const startInput = document.getElementById('start');
+    const endInput = document.getElementById('end');
+    const extractBtn = document.getElementById('extractBtn');
+    const downloadLinkDiv = document.getElementById('downloadLink');
+    const downloadAnchor = downloadLinkDiv.querySelector('a');
+    let uploadedFile;
 
-      if (!pdfBase64) {
-        alert('Please paste a Base64-encoded PDF.');
-        return;
-      }
+    function setDragOver(on) {
+      dropArea.classList.toggle('dragover', on);
+    }
 
-      try {
-        const resp = await fetch('/extract', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pdfBase64, start, end })
-        });
-
-        const data = await resp.json();
-        if (!resp.ok) {
-          throw new Error(data.error || 'Unknown error');
-        }
-
-        const out = data.extractedPdfBase64;
-        const textarea = document.getElementById('result');
-        textarea.value = out;
-
-        // prepare download link
-        const link = document.getElementById('downloadLink');
-        link.href = 'data:application/pdf;base64,' + out;
-        link.download = 'extracted.pdf';
-        link.textContent = 'Download Extracted PDF';
-        link.style.display = 'block';
-
-      } catch (err) {
-        alert('Extraction failed: ' + err.message);
-      }
+    dropArea.addEventListener('dragover', e => { e.preventDefault(); setDragOver(true); });
+    dropArea.addEventListener('dragleave', () => setDragOver(false));
+    dropArea.addEventListener('drop', e => {
+      e.preventDefault(); setDragOver(false);
+      const file = e.dataTransfer.files[0];
+      if (file && file.type === 'application/pdf') handleFile(file);
+      else alert('Please provide a PDF file');
     });
+    dropArea.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (file && file.type === 'application/pdf') handleFile(file);
+      else alert('Please select a valid PDF');
+    });
+
+async function handleFile(file) {
+  uploadedFile = file;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const base64 = reader.result.split(',')[1]; // remove "data:application/pdf;base64,"
+    const resp = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pdfBase64: base64 })
+    });
+    if (!resp.ok) { alert('Upload failed'); return; }
+    const { pageCount } = await resp.json();
+    pageCountEl.textContent = pageCount;
+    pageInfo.hidden = false;
+    startInput.max = pageCount - 1;
+    endInput.max = pageCount - 1;
+    startInput.disabled = false;
+    endInput.disabled = false;
+    extractBtn.disabled = false;
+  };
+  reader.readAsDataURL(file);
+}
+
+
+extractBtn.addEventListener('click', async () => {
+  const start = parseInt(startInput.value, 10);
+  const end = parseInt(endInput.value, 10);
+  if (isNaN(start) || isNaN(end) || start < 0 || end > parseInt(endInput.max) || start > end) {
+    alert('Please enter valid page indices');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const base64 = reader.result.split(',')[1];
+    const resp = await fetch('/api/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pdfBase64: base64, start, end })
+    });
+    if (!resp.ok) { alert('Extraction failed'); return; }
+    const { extractedPdfBase64 } = await resp.json();
+    downloadAnchor.href = 'data:application/pdf;base64,' + extractedPdfBase64;
+    downloadLinkDiv.style.display = 'block';
+  };
+  reader.readAsDataURL(uploadedFile);
+});
+
   </script>
 </body>
 </html>
