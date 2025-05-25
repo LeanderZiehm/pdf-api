@@ -1,13 +1,12 @@
-const express = require('express');
+
 const path = require('path');
 const { PDFDocument } = require('pdf-lib');
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+const express = require('express');
+const router  = express.Router();
 
-
-app.use(express.json({ limit: '100mb' }));
-app.use("/", express.static(path.join(__dirname, 'public')));
+// router.use(express.json({ limit: '100mb' }));
+// app.use("/", express.static(path.join(__dirname, 'public')));
 
 
 /**
@@ -15,7 +14,7 @@ app.use("/", express.static(path.join(__dirname, 'public')));
  * Body: { pdfBase64: string }
  * Response: { pageCount: number }
  */
-app.post('/api/upload', async (req, res) => {
+router.post('/api/upload', async (req, res) => {
   try {
     const { pdfBase64 } = req.body;
     if (typeof pdfBase64 !== 'string') {
@@ -36,7 +35,7 @@ app.post('/api/upload', async (req, res) => {
  * Body: { pdfBase64: string, start: number, end: number }
  * Response: { extractedPdfBase64: string }
  */
-app.post('/api/extract', async (req, res) => {
+router.post('/api/extract', async (req, res) => {
   try {
     const { pdfBase64, start, end } = req.body;
     const startIdx = parseInt(start, 10);
@@ -71,10 +70,14 @@ app.post('/api/extract', async (req, res) => {
 });
 
 // Fallback to serve index.html for SPA
-app.get('/', (req, res) => {
+router.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`Server listening on http://localhost:${PORT}`);
-});
+// app.listen(PORT, () => {
+//   console.log(`Server listening on http://localhost:${PORT}`);
+// });
+
+
+module.exports = router;
+
