@@ -3,7 +3,7 @@ const fs      = require('fs');
 const path    = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5008;
 
 // 1) Serve your global public files (e.g. CSS/images)
 app.use(express.static(path.join(__dirname, 'public')));
